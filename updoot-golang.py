@@ -70,6 +70,7 @@ def get_versions(all, unstable):
 
 
 def install_file(file):
+    # TODO check installed version before downloading
     print('+ Installing {}'.format(file['version']))
 
     olddir = tempfile.TemporaryDirectory()
