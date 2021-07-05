@@ -65,8 +65,8 @@ def get_versions(all, unstable):
         sys.exit(1)
     versions = resp.json()
 
-    if all and not unstable:
-        versions = list(filter(lambda v: v.stable, versions))
+    if not unstable:
+        versions = list(filter(lambda v: v['stable'], versions))
     return versions
 
 # True if b is more recent than a
@@ -197,26 +197,43 @@ def install_file(file):
         olddir.cleanup()
 
 
-# command entrypoints
-
-def install_latest(args):
+def install_version(version):
     opsys, arch = detect_platform()
-    versions = get_versions(args.all, args.unstable)
-
-    for file in find_latest_version(versions)['files']:
+    for file in version['files']:
         if file['kind'] == 'archive' and file['os'] == opsys and file['arch'] == arch:
             install_file(file)
             break
     else:
-        print('no suitable Go build was found :(')
-        print('maybe they stopped building Go for you at some point :( :( :(')
+        print('No suitable build of {} was found for {}/{}'.format(version['version'], opsys, arch))
         sys.exit(1)
 
 
+# command entrypoints
+
+def install_latest(args):
+    versions = get_versions(args.all, args.unstable)
+    install_version(find_latest_version(versions))
+
+
 def install(args):
-    print('install')
-    print(args)
-    raise NotImplementedError()
+    target = args.version
+    if not target.startswith('go'):
+        target = 'go' + target
+
+    versions = get_versions(False, False)
+    for version in versions:
+        if version['version'] == target:
+            install_version(version)
+            break
+    else:
+        versions = get_versions(True, True)
+        for version in versions:
+            if version['version'] == target:
+                install_version(version)
+                break
+        else:
+            print('Version {} was not found.'.format(target))
+            sys.exit(1)
 
 
 def list_versions(args):
@@ -226,23 +243,27 @@ def list_versions(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Manages a Go installation.',
-                                     epilog='By default, this tool will only work with recent stable versions of Go unless otherwise specified.')
+    parser = argparse.ArgumentParser(description='Manages a Go installation.')
     parser.set_defaults(func=install_latest, all=False, unstable=False)
+    parser.add_argument('-a', '--all', action='store_true',
+                             help='process all stable versions (i.e. with "list" subcommand)')
+    parser.add_argument('-u', '--unstable', action='store_true',
+                                       help='process all stable and unstable versions (i.e. install latest unstable version)')
     subparsers = parser.add_subparsers()
 
     parser_install_latest = subparsers.add_parser(
         'install-latest', help='(default) Install the latest stable version')
-    # parser_install_latest.set_defaults(func=install_latest) # already the global default
+    parser_install_latest.set_defaults(func=install_latest) # already the global default, but meh whatever
     parser_install_latest.add_argument('-u', '--unstable', action='store_true',
                                        help='install the latest unstable version')
 
     parser_install = subparsers.add_parser(
         'install', help='Install a specified version')
+    parser_install.add_argument('version')
     parser_install.set_defaults(func=install)
 
     parser_list = subparsers.add_parser(
-        'list', help='List recent stable versions')
+        'list', help='List supported stable versions')
     parser_list.set_defaults(func=list_versions)
     parser_list.add_argument('-a', '--all', action='store_true',
                              help='list all stable versions')
