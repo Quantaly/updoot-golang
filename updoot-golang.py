@@ -8,13 +8,14 @@ import requests
 import platform
 import hashlib
 import argparse
+import re
 
 # TODO: detect from environment or `go env GOROOT` or shutil.which() if set to None
 GOROOT = '/usr/local/go'
 
 GOWEBSITE = 'https://golang.org'
 
-# dicts map from `platform` methods to remote data
+# dicts map from Python names to Go names
 # TODO: support more OS's/arch's
 
 OS_DICT = {
@@ -26,16 +27,16 @@ ARCH_DICT = {
     'aarch64': 'arm64',
 }
 
+INT_REGEX = re.compile(r'\d+')
+
 
 def detect_platform():
     def platform_unsupported():
         print('this OS and/or architecture is not supported by updoot-golang :(')
         print('try looking at OS_DICT and ARCH_DICT')
-        print('if OS_DICT doesn\'t have your OS then it would need support in install_file')
-        print('but if it\'s just ARCH_DICT you can probably just add your architecture to the list')
-        print('unless it\'s something weird they don\'t build Go for, then you\'ll just get a ~*~different error~*~')
+        print('see if you can add your situation to the relevant dict(s)')
+        print('though if it\'s something weird they don\'t build Go for, you\'ll just get a ~*~different error~*~')
         print('if you fix this for yourself, plz send me a PR (https://github.com/Quantaly/updoot-golang/)')
-        print('especially if you add support for your OS')
         sys.exit(1)
 
     opsys = platform.system()
@@ -68,6 +69,58 @@ def get_versions(all, unstable):
         versions = list(filter(lambda v: v.stable, versions))
     return versions
 
+# True if b is more recent than a
+def cmp_versions(a, b):
+    def replace_none_with_zero_tuple(value):
+        if value is None:
+            return (0,)
+        return value
+
+    a_major = replace_none_with_zero_tuple(INT_REGEX.search(a))
+    b_major = replace_none_with_zero_tuple(INT_REGEX.search(b))
+    a_major_int, b_major_int = int(a_major[0]), int(b_major[0])
+    if a_major_int != b_major_int:
+        return b_major_int > a_major_int
+
+    a_minor = replace_none_with_zero_tuple(INT_REGEX.search(a, a_major.end()))
+    b_minor = replace_none_with_zero_tuple(INT_REGEX.search(b, b_major.end()))
+    a_minor_int, b_minor_int = int(a_minor[0]), int(b_minor[0])
+    if a_minor_int != b_minor_int:
+        return b_minor_int > a_minor_int
+
+    a_beta, a_rc = 'beta' in a, 'rc' in a
+    b_beta, b_rc = 'beta' in b, 'rc' in b
+
+    if a_beta == b_beta and a_rc == b_rc:
+        a_patch = replace_none_with_zero_tuple(INT_REGEX.search(a, a_minor.end()))
+        b_patch = replace_none_with_zero_tuple(INT_REGEX.search(b, b_minor.end()))
+        if b_patch is None:
+            b_patch = (0,)
+        a_patch_int, b_patch_int = int(a_patch[0]), int(b_patch[0])
+        return b_patch_int > a_patch_int
+    else:
+        # is a release and b prerelease?
+        if not (a_beta or a_rc) and (b_beta or b_rc):
+            return False
+        # is b release and a prerelease?
+        elif not (b_beta or b_rc) and (a_beta or a_rc):
+            return True
+        # is a release candidate and b beta?
+        elif a_rc and b_beta:
+            return False
+        # is b release candidate and a beta?
+        elif b_rc and a_beta:
+            return True
+        # either the versions are the same or the version strings are very weird
+        return False
+
+def find_latest_version(versions):
+    latest = versions[0]
+    for version in versions[1:]:
+        if cmp_versions(latest['version'], version['version']):
+            latest = version
+    return latest
+    
 
 def install_file(file):
     # TODO check installed version before downloading
@@ -114,7 +167,8 @@ def install_file(file):
     if download_hash.hexdigest() == file['sha256']:
         print('Verification succeeded.')
     else:
-        shutil.move(os.path.join(olddir.name, os.path.basename(GOROOT)), GOROOT)
+        shutil.move(os.path.join(
+            olddir.name, os.path.basename(GOROOT)), GOROOT)
         print('Verification failed!')
         print('Expected hash: {}'.format(file['sha256']))
         print('Actual hash: {}'.format(download_hash.hexdigest()))
@@ -149,8 +203,7 @@ def install_latest(args):
     opsys, arch = detect_platform()
     versions = get_versions(args.all, args.unstable)
 
-    # FIXME actually scan to find the latest version; with unstable, may not be at the top
-    for file in versions[0]['files']:
+    for file in find_latest_version(versions)['files']:
         if file['kind'] == 'archive' and file['os'] == opsys and file['arch'] == arch:
             install_file(file)
             break
@@ -188,7 +241,8 @@ if __name__ == '__main__':
         'install', help='Install a specified version')
     parser_install.set_defaults(func=install)
 
-    parser_list = subparsers.add_parser('list', help='List recent stable versions')
+    parser_list = subparsers.add_parser(
+        'list', help='List recent stable versions')
     parser_list.set_defaults(func=list_versions)
     parser_list.add_argument('-a', '--all', action='store_true',
                              help='list all stable versions')
