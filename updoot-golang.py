@@ -70,6 +70,8 @@ def get_versions(all, unstable):
     return versions
 
 # True if b is more recent than a
+
+
 def cmp_versions(a, b):
     def replace_none_with_zero_tuple(value):
         if value is None:
@@ -92,8 +94,10 @@ def cmp_versions(a, b):
     b_beta, b_rc = 'beta' in b, 'rc' in b
 
     if a_beta == b_beta and a_rc == b_rc:
-        a_patch = replace_none_with_zero_tuple(INT_REGEX.search(a, a_minor.end()))
-        b_patch = replace_none_with_zero_tuple(INT_REGEX.search(b, b_minor.end()))
+        a_patch = replace_none_with_zero_tuple(
+            INT_REGEX.search(a, a_minor.end()))
+        b_patch = replace_none_with_zero_tuple(
+            INT_REGEX.search(b, b_minor.end()))
         if b_patch is None:
             b_patch = (0,)
         a_patch_int, b_patch_int = int(a_patch[0]), int(b_patch[0])
@@ -114,13 +118,14 @@ def cmp_versions(a, b):
         # either the versions are the same or the version strings are very weird
         return False
 
+
 def find_latest_version(versions):
     latest = versions[0]
     for version in versions[1:]:
         if cmp_versions(latest['version'], version['version']):
             latest = version
     return latest
-    
+
 
 def install_file(file):
     # TODO check installed version before downloading
@@ -204,7 +209,8 @@ def install_version(version):
             install_file(file)
             break
     else:
-        print('No suitable build of {} was found for {}/{}'.format(version['version'], opsys, arch))
+        print(
+            'No suitable build of {} was found for {}/{}'.format(version['version'], opsys, arch))
         sys.exit(1)
 
 
@@ -237,25 +243,24 @@ def install(args):
 
 
 def list_versions(args):
-    print('list_versions')
-    print(args)
-    raise NotImplementedError()
+    versions = get_versions(args.all, args.unstable)
+    for version in versions:
+        print(version['version'])
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manages a Go installation.')
     parser.set_defaults(func=install_latest, all=False, unstable=False)
-    parser.add_argument('-a', '--all', action='store_true',
-                             help='process all stable versions (i.e. with "list" subcommand)')
     parser.add_argument('-u', '--unstable', action='store_true',
-                                       help='process all stable and unstable versions (i.e. install latest unstable version)')
+                        help='install the latest unstable version')
     subparsers = parser.add_subparsers()
 
     parser_install_latest = subparsers.add_parser(
-        'install-latest', help='(default) Install the latest stable version')
-    parser_install_latest.set_defaults(func=install_latest) # already the global default, but meh whatever
+        'install-latest', help='Install the latest stable version (invoked by default)')
+    # already the global default, but meh whatever
+    parser_install_latest.set_defaults(func=install_latest)
     parser_install_latest.add_argument('-u', '--unstable', action='store_true',
-                                       help='install the latest unstable version')
+                                       help='install the latest version, which may be unstable')
 
     parser_install = subparsers.add_parser(
         'install', help='Install a specified version')
