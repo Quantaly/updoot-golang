@@ -104,7 +104,7 @@ def install_file(file):
     # TODO provide some form of progress indicator
     # maybe use curl if available?
     for chunk in download_resp.iter_content(65536):
-        # if you don't specify a chunk_size then iter_content reads bytes one at a time
+        # if you don't specify a chunk_size then iter_content apparently reads bytes one at a time
         # why the hecc is that the default behavior?? who would ever want that?? who knows
         # print(len(chunk))
         download.write(chunk)
@@ -114,7 +114,7 @@ def install_file(file):
     if download_hash.hexdigest() == file['sha256']:
         print('Verification succeeded.')
     else:
-        # FIXME restore old version from olddir
+        shutil.move(os.path.join(olddir.name, os.path.basename(GOROOT)), GOROOT)
         print('Verification failed!')
         print('Expected hash: {}'.format(file['sha256']))
         print('Actual hash: {}'.format(download_hash.hexdigest()))
@@ -188,7 +188,7 @@ if __name__ == '__main__':
         'install', help='Install a specified version')
     parser_install.set_defaults(func=install)
 
-    parser_list = subparsers.add_parser('list', help='List available versions')
+    parser_list = subparsers.add_parser('list', help='List recent stable versions')
     parser_list.set_defaults(func=list_versions)
     parser_list.add_argument('-a', '--all', action='store_true',
                              help='list all stable versions')
